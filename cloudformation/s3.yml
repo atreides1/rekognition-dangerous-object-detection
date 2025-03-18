@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: S3 Bucket for Rekognition video frame storage
+
+Parameters:
+  S3BucketName:
+   Description: The name for the S3 Bucket
+   Type: String
+   Default: my-object-detection-bucket
+
+Resources:
+  S3Bucket:
+   Type: AWS::S3::Bucket
+   Properties:
+    BucketName: !Sub '${S3BucketName}-${AWS::Region}-${AWS::AccountId}'
+
+Outputs:
+  S3BucketARN:
+    Description: Object Detection S3 Bucket ARN
+    Value: !GetAtt S3Bucket.Arn
+    Export:
+      Name: S3BucketARN
+
+  S3BucketName:
+    Description: Object Detection S3 Bucket Name
+    Value: !Ref S3Bucket
+    Export:
+      Name: S3BucketName

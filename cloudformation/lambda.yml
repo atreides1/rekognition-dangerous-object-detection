@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Lambda Function for Rekognition Image Detection
+
+Parameters: {}
+
+Mappings: {}
+
+Conditions: {}
+
+Resources:
+  LambdaExecRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Description: IAM Role for detect-object Lambda
+      Policies:
+        - PolicyName: object-detection-lambda-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: AmazonRekognitionReadOnlyAccess
+                Effect: Allow
+                Action:
+                  - rekognition:DetectLabels
+                Resource: '*'
+              - Sid: PublishSNSMessage
+                Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !ImportValue SNSTopicARN
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !ImportValue S3BucketARN
+      Tags:
+        - Key : Project 
+          Value: RekognitionObjectDetection
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import os
+          import json
+          import boto3
+          import urllib.parse
+
+          client = boto3.client('rekognition')
+          sns_client = boto3.client('sns')
+          sns_topic_arn = os.environ['SNS_TOPIC_ARN']
+
+          dangerous_labels = ["weapon", "gun", "knife"]
+
+          def lambda_handler(event, context):
+              bucket_name = event['Records'][0]['s3']['bucket']['name']
+              file_name = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+
+              response = client.detect_labels(
+                  Image={
+                      'S3Object': {
+                          'Bucket': bucket_name,
+                          'Name': file_name,
+                      }
+                  },
+                  MaxLabels=10,
+                  MinConfidence=75
+              )
+
+              found_labels = []
+              labels = response['Labels']
+              msg = ""
+
+              for label in labels:
+                  if label['Name'].lower() in dangerous_labels:
+                      found_labels.append(label['Name'])
+
+              # generate msg text
+              if len(found_labels) == 0:
+                  msg = "No dangerous objects detected"
+              elif len(found_labels) == 1:
+                  msg = f"Dangerous object detected: {found_labels[0]}"
+              else:
+                  msg = f"Dangerous objects detected: {', '.join(found_labels)}"
+
+              # send alert to SNS
+              if len(found_labels) > 0:
+                  sns_client.publish(
+                      TopicArn = sns_topic_arn,
+                      Message = msg,
+                      Subject = "Dangerous Object(s) Detected"
+                  )
+
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps(msg)
+              }
+
+      Description: Send image frame to Rekognition for object detection.
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN : !ImportValue SNSTopicARN
+      FunctionName: detect-object
+      Handler: lambda_handler
+      Role: !GetAtt LambdaExecRole.Arn
+      Runtime: python3.13
+      Tags:
+        - Key : Project 
+          Value: RekognitionObjectDetection
+  S3InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt LambdaFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !ImportValue S3BucketARN
+
+

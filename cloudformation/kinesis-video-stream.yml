@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Kinesis Video Stream for Rekognition Image Detection
+
+Parameters:
+  VideoStreamName:
+    Description: The name of the video stream
+    Type: String
+    Default: my-video-stream
+
+Mappings: {}
+
+Conditions: {}
+
+Resources:
+  KinesisVideoStream:
+    Type: AWS::KinesisVideo::Stream
+    Properties:
+      DataRetentionInHours: 1
+      Name: !Ref VideoStreamName
+      Tags: 
+        - Key: Project
+          Value: RekognitionObjectDetection
+
+Outputs:
+  KinesisVideoStreamARN:
+    Description: Kinesis Video Stream ARN
+    Value: !GetAtt KinesisVideoStream.Arn
+    Export:
+      Name: KinesisVideoStreamARN

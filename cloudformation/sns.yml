@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: SNS Topic for Rekognition Image Detection
+
+Parameters:
+  SubscriptionEmail:
+    Description: The email that receives notifications.
+    Type: String
+
+Mappings: {}
+
+Conditions: {}
+
+Resources:
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: "Security Alerts"
+      Tags:
+        - Key : Project 
+          Value: RekognitionObjectDetection
+      TopicName: my-image-detection-topic
+
+  SNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref SubscriptionEmail
+      Protocol: "email"
+      TopicArn: !Ref SNSTopic
+
+Outputs:
+  TopicARN:
+    Description: ARN of newly created SNS Topic
+    Value: !Ref SNSTopic
+    Export:
+      Name: SNSTopicARN
+
+  QueueName:
+    Description: Name of newly created SNS Topic
+    Value: !GetAtt SNSTopic.TopicName

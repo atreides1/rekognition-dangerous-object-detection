@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Rekognition Stream Processor for Person Detection
+
+Parameters:
+  StreamProcessorName:
+    Description: The name of the Stream Processor
+    Type: String
+    Default: my-stream-processor
+
+Mappings: {}
+
+Conditions: {}
+
+Resources:
+  RekognitionRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - rekognition.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Description: IAM Role for Rekognition
+      Policies: 
+        - PolicyName: rekognition-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesis:Get*
+                  - kinesis:DescribeStreamSummary
+                Resource: !ImportValue KinesisVideoStreamARN
+              - Sid: PublishSNSMessage
+                Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !ImportValue SNSTopicARN
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !ImportValue S3BucketARN
+      RoleName: rekognition-stream-processor-role
+      Tags: 
+        - Key : Project 
+          Value: RekognitionObjectDetection
+
+  RekognitionStreamProcessor:
+    Type: AWS::Rekognition::StreamProcessor
+    Properties:
+      ConnectedHomeSettings: 
+          Labels: 
+            - PERSON
+          MinConfidence: 75
+      DataSharingPreference: 
+        OptIn: False
+      KinesisVideoStream:
+        Arn: !ImportValue KinesisVideoStreamARN
+      Name: !Ref StreamProcessorName
+      NotificationChannel: 
+        Arn: !ImportValue SNSTopicARN
+      RoleArn: !GetAtt RekognitionRole.Arn
+      S3Destination: 
+        BucketName: !ImportValue S3BucketName
+      Tags: 
+        - Key : Project 
+          Value: RekognitionObjectDetection
+
+Outputs:
+  StreamProcessorName:
+    Description: Name of newly created Stream Processor
+    Value: !Ref StreamProcessorName
